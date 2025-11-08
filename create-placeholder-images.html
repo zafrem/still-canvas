@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Placeholder Images</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            margin: 10px 0;
+            display: block;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        .info {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Create Placeholder Images</h1>
+
+    <div class="info">
+        <p><strong>Instructions:</strong></p>
+        <ol>
+            <li>Click each "Generate" button below</li>
+            <li>Right-click on each canvas and select "Save image as..."</li>
+            <li>Save to the appropriate folder:
+                <ul>
+                    <li>Landscape → assets/images/landscape/default.jpg</li>
+                    <li>Meditation → assets/images/meditation/default.jpg</li>
+                    <li>Still Life → assets/images/stilllife/default.jpg</li>
+                    <li>Photography → assets/images/photography/default.jpg</li>
+                </ul>
+            </li>
+        </ol>
+        <p><strong>Note:</strong> These are just placeholders. Replace them with real images for best results!</p>
+    </div>
+
+    <h2>Landscape</h2>
+    <canvas id="landscape" width="800" height="600"></canvas>
+    <button onclick="generateLandscape()">Generate Landscape</button>
+
+    <h2>Meditation</h2>
+    <canvas id="meditation" width="800" height="600"></canvas>
+    <button onclick="generateMeditation()">Generate Meditation</button>
+
+    <h2>Still Life</h2>
+    <canvas id="stilllife" width="800" height="600"></canvas>
+    <button onclick="generateStillLife()">Generate Still Life</button>
+
+    <h2>Photography</h2>
+    <canvas id="photography" width="800" height="600"></canvas>
+    <button onclick="generatePhotography()">Generate Photography</button>
+
+    <script>
+        function generateLandscape() {
+            const canvas = document.getElementById('landscape');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            // Sky gradient
+            const skyGradient = ctx.createLinearGradient(0, 0, 0, height * 0.6);
+            skyGradient.addColorStop(0, '#87CEEB');
+            skyGradient.addColorStop(1, '#E0F6FF');
+            ctx.fillStyle = skyGradient;
+            ctx.fillRect(0, 0, width, height * 0.6);
+
+            // Mountains
+            ctx.fillStyle = '#8B7355';
+            ctx.beginPath();
+            ctx.moveTo(0, height * 0.6);
+            ctx.lineTo(width * 0.3, height * 0.3);
+            ctx.lineTo(width * 0.6, height * 0.6);
+            ctx.fill();
+
+            ctx.fillStyle = '#A0826D';
+            ctx.beginPath();
+            ctx.moveTo(width * 0.4, height * 0.6);
+            ctx.lineTo(width * 0.7, height * 0.2);
+            ctx.lineTo(width, height * 0.6);
+            ctx.fill();
+
+            // Ground
+            const groundGradient = ctx.createLinearGradient(0, height * 0.6, 0, height);
+            groundGradient.addColorStop(0, '#7CB342');
+            groundGradient.addColorStop(1, '#558B2F');
+            ctx.fillStyle = groundGradient;
+            ctx.fillRect(0, height * 0.6, width, height * 0.4);
+
+            // Sun
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(width * 0.8, height * 0.2, 40, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function generateMeditation() {
+            const canvas = document.getElementById('meditation');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            // Peaceful gradient
+            const gradient = ctx.createRadialGradient(
+                width / 2, height / 2, 0,
+                width / 2, height / 2, width * 0.7
+            );
+            gradient.addColorStop(0, '#E8EAF6');
+            gradient.addColorStop(0.5, '#C5CAE9');
+            gradient.addColorStop(1, '#9FA8DA');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Concentric circles
+            for (let i = 5; i > 0; i--) {
+                ctx.strokeStyle = `rgba(63, 81, 181, ${0.1 * i})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(width / 2, height / 2, i * 60, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        function generateStillLife() {
+            const canvas = document.getElementById('stilllife');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            // Background
+            const bgGradient = ctx.createLinearGradient(0, 0, width, height);
+            bgGradient.addColorStop(0, '#F5F5DC');
+            bgGradient.addColorStop(1, '#D2B48C');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Table
+            ctx.fillStyle = '#8B4513';
+            ctx.fillRect(0, height * 0.7, width, height * 0.3);
+
+            // Vase
+            ctx.fillStyle = '#CD853F';
+            ctx.beginPath();
+            ctx.moveTo(width * 0.4, height * 0.5);
+            ctx.lineTo(width * 0.35, height * 0.7);
+            ctx.lineTo(width * 0.45, height * 0.7);
+            ctx.closePath();
+            ctx.fill();
+
+            // Apple
+            ctx.fillStyle = '#DC143C';
+            ctx.beginPath();
+            ctx.arc(width * 0.6, height * 0.65, 40, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Bowl
+            ctx.fillStyle = '#4682B4';
+            ctx.beginPath();
+            ctx.ellipse(width * 0.25, height * 0.65, 60, 30, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function generatePhotography() {
+            const canvas = document.getElementById('photography');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            // Abstract gradient background
+            const gradient = ctx.createLinearGradient(0, 0, width, height);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(0.5, '#764ba2');
+            gradient.addColorStop(1, '#f093fb');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+
+            // Random geometric shapes
+            const shapes = 20;
+            for (let i = 0; i < shapes; i++) {
+                const x = Math.random() * width;
+                const y = Math.random() * height;
+                const size = Math.random() * 100 + 20;
+                const opacity = Math.random() * 0.3 + 0.1;
+
+                ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+
+                if (Math.random() > 0.5) {
+                    // Circle
+                    ctx.beginPath();
+                    ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Rectangle
+                    ctx.fillRect(x, y, size, size);
+                }
+            }
+        }
+
+        // Auto-generate all on load
+        window.onload = function() {
+            generateLandscape();
+            generateMeditation();
+            generateStillLife();
+            generatePhotography();
+        };
+    </script>
+</body>
+</html>
