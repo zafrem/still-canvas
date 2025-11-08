@@ -6,15 +6,17 @@ class StillCanvasApp {
         this.analyzer = new ImageAnalyzer();
         this.painter = new PaintEngine('paintCanvas');
         this.currentCategory = 'landscape';
-        this.fragmentSize = 20;
+        this.fragmentSize = 12; // Smaller pieces for finer brush strokes
         this.isLoading = false;
+        this.isCircularMode = true; // Whether to use circular painting (draw then erase)
 
         // Image paths for each category
+        // Will try both .png and .jpg extensions automatically
         this.imagePaths = {
-            landscape: 'assets/images/landscape/default.jpg',
-            meditation: 'assets/images/meditation/default.jpg',
-            stilllife: 'assets/images/stilllife/default.jpg',
-            photography: 'assets/images/photography/default.jpg'
+            landscape: ['assets/images/landscape/default.png', 'assets/images/landscape/default.jpg'],
+            meditation: ['assets/images/meditation/default.png', 'assets/images/meditation/default.jpg'],
+            stilllife: ['assets/images/stilllife/default.png', 'assets/images/stilllife/default.jpg'],
+            photography: ['assets/images/photography/default.png', 'assets/images/photography/default.jpg']
         };
 
         this.initializeUI();
@@ -30,8 +32,7 @@ class StillCanvasApp {
             categoryBtns: document.querySelectorAll('.category-btn'),
             pauseBtn: document.getElementById('pauseBtn'),
             resetBtn: document.getElementById('resetBtn'),
-            speedSlider: document.getElementById('speedSlider'),
-            fragmentSlider: document.getElementById('fragmentSlider'),
+            circularToggle: document.getElementById('circularToggle'),
             progressText: document.getElementById('progressText'),
             progressFill: document.getElementById('progressFill'),
             loading: document.getElementById('loading')
@@ -68,15 +69,9 @@ class StillCanvasApp {
             this.resetPainting();
         });
 
-        // Speed slider
-        this.elements.speedSlider.addEventListener('input', (e) => {
-            this.painter.setSpeed(parseInt(e.target.value));
-        });
-
-        // Fragment size slider
-        this.elements.fragmentSlider.addEventListener('change', (e) => {
-            this.fragmentSize = parseInt(e.target.value);
-            this.loadImage(this.imagePaths[this.currentCategory]);
+        // Circular painting toggle
+        this.elements.circularToggle.addEventListener('change', (e) => {
+            this.isCircularMode = e.target.checked;
         });
 
         // Keyboard shortcuts
@@ -121,18 +116,43 @@ class StillCanvasApp {
 
     /**
      * Load and analyze an image
-     * @param {string} imagePath - Path to the image
+     * @param {string|Array} imagePaths - Path(s) to the image (tries each in order)
      */
-    async loadImage(imagePath) {
+    async loadImage(imagePaths) {
         if (this.isLoading) return;
+
+        // Normalize to array
+        const paths = Array.isArray(imagePaths) ? imagePaths : [imagePaths];
 
         try {
             this.isLoading = true;
             this.showLoading(true);
             this.painter.pause();
 
-            // Analyze image
-            const result = await this.analyzer.analyze(imagePath, this.fragmentSize);
+            // Try each path until one succeeds
+            let result = null;
+            let lastError = null;
+            let successfulPath = null;
+
+            for (const imagePath of paths) {
+                try {
+                    console.log(`Trying to load: ${imagePath}`);
+                    // Analyze image
+                    result = await this.analyzer.analyze(imagePath, this.fragmentSize);
+                    successfulPath = imagePath;
+                    console.log(`✓ Successfully analyzed: ${imagePath}`);
+                    break; // Success! Stop trying other paths
+                } catch (error) {
+                    console.log(`✗ Failed to load: ${imagePath}`, error.message);
+                    lastError = error;
+                    // Continue to next path
+                }
+            }
+
+            // If none succeeded, throw the last error
+            if (!result) {
+                throw lastError || new Error('No valid image paths provided');
+            }
 
             // Load into painter
             this.painter.load(result.fragments, result.width, result.height);
@@ -143,6 +163,8 @@ class StillCanvasApp {
             this.elements.progressFill.style.width = '0%';
             this.elements.pauseBtn.textContent = 'Pause';
 
+            console.log(`Successfully loaded: ${successfulPath}`);
+
             // Auto-start painting
             setTimeout(() => {
                 this.painter.start();
@@ -152,7 +174,8 @@ class StillCanvasApp {
 
         } catch (error) {
             console.error('Error loading image:', error);
-            this.showError(`Failed to load image. Please check if the image exists at: ${imagePath}`);
+            const pathsList = paths.join(' or ');
+            this.showError(`Failed to load image. Please check if an image exists at: ${pathsList}`);
         } finally {
             this.isLoading = false;
         }
@@ -200,9 +223,30 @@ class StillCanvasApp {
      * Called when painting is complete
      */
     onPaintingComplete() {
-        this.elements.progressText.textContent = 'Complete';
-        this.elements.pauseBtn.textContent = 'Pause';
-        this.elements.pauseBtn.disabled = true;
+        if (this.isCircularMode) {
+            // In circular mode, check if we just finished drawing or erasing
+            if (this.painter.isErasing) {
+                // Just finished erasing, start drawing again
+                this.elements.progressText.textContent = 'Restarting...';
+                setTimeout(() => {
+                    this.painter.reset();
+                    this.painter.start();
+                    this.elements.pauseBtn.disabled = false;
+                }, 500);
+            } else {
+                // Just finished drawing, start erasing
+                this.elements.progressText.textContent = 'Erasing...';
+                setTimeout(() => {
+                    this.painter.startErasing();
+                    this.elements.pauseBtn.disabled = false;
+                }, 1000);
+            }
+        } else {
+            // Non-circular mode: just stop
+            this.elements.progressText.textContent = 'Complete';
+            this.elements.pauseBtn.textContent = 'Pause';
+            this.elements.pauseBtn.disabled = true;
+        }
     }
 
     /**

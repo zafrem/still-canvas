@@ -21,9 +21,12 @@ assets/images/
 To add your own images:
 
 1. Place images in the appropriate category folder
-2. Rename the image to `default.jpg` or update the path in `js/app.js`
-3. Recommended image dimensions: 800x600 to 1200x900 pixels
-4. Supported formats: JPG, PNG
+2. Rename the image to `default.jpg` or `default.png`
+3. The app will automatically try both .jpg and .png extensions
+4. Recommended image dimensions: 800x600 to 1200x900 pixels
+5. Supported formats: JPG, PNG
+
+**Note:** The app tries .jpg first, then .png. You can have either format - no need to update code!
 
 ## Image Recommendations
 

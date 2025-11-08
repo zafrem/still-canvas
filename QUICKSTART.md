@@ -22,8 +22,9 @@ You already have it if you're reading this file.
 ### Option B: Use Real Images (Better Results)
 
 1. Find 4 images you like (recommended: 800x600 to 1200x900 pixels)
-2. Rename them to `default.jpg`
+2. Rename them to `default.jpg` or `default.png` (both formats work!)
 3. Place them in the category folders above
+4. The app automatically detects which format you used
 
 **Pro tip**: Download free stock photos from:
 - [Unsplash](https://unsplash.com) - Beautiful free photos

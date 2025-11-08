@@ -9,7 +9,9 @@ A color-driven generative art web application that gradually "paints" images on 
 ## Features
 
 - **Color-Based Animation**: Images are painted from light to dark tones, simulating a natural painting process
+- **Brush-Like Appearance**: Organic, hand-painted look with randomized strokes and subtle blending
 - **Multiple Categories**: Choose from Landscape, Meditation, Still Life, or Photography
+- **Multiple Format Support**: Automatically loads JPG or PNG images - no configuration needed
 - **Real-time Controls**: Pause, resume, and reset animations
 - **Adjustable Settings**: Control painting speed and fragment size
 - **Responsive Design**: Works on desktop and tablet devices
@@ -39,8 +41,9 @@ You have two options:
 
 **Option B: Use Your Own Images**
 1. Place your images in the appropriate category folders
-2. Rename them to `default.jpg` (or update paths in `js/app.js`)
-3. Recommended size: 800x600 to 1200x900 pixels
+2. Rename them to `default.jpg` or `default.png`
+3. The app automatically tries both formats - no code changes needed!
+4. Recommended size: 800x600 to 1200x900 pixels
 
 ### 3. Run Locally
 
@@ -72,11 +75,14 @@ Then visit `http://localhost:8000`
 1. Divides source images into small fragments (default 20x20 pixels)
 2. Calculates average brightness for each fragment using luminance formula
 3. Sorts fragments from lightest to darkest
+4. Shuffles fragments within brightness groups for organic, brush-like appearance
 
 ### Painting Engine (`paintEngine.js`)
-1. Renders fragments sequentially on HTML5 canvas
-2. Maintains 30-60 FPS for smooth animation
-3. Supports speed control (1-100, affecting fragments per frame)
+1. Renders fragments sequentially on HTML5 canvas with brush effects
+2. Applies random opacity variations (88-100%) for natural strokes
+3. Adds subtle position jitter for hand-painted feel
+4. Maintains 30-60 FPS for smooth animation
+5. Supports speed control (1-100, affecting fragments per frame)
 
 ### Application Flow (`app.js`)
 1. User selects a category
@@ -121,8 +127,14 @@ Edit `js/app.js`:
 
 ```javascript
 this.imagePaths = {
-    landscape: 'assets/images/landscape/your-image.jpg',
+    // Single image (will try both .jpg and .png automatically)
+    landscape: ['assets/images/landscape/your-image.jpg', 'assets/images/landscape/your-image.png'],
+
+    // Or use a single string - both formats work
     meditation: 'assets/images/meditation/your-image.jpg',
+
+    // Add multiple fallback options
+    stilllife: ['assets/images/stilllife/image1.jpg', 'assets/images/stilllife/image2.png'],
     // ...
 };
 ```
@@ -168,6 +180,7 @@ Requires modern browser with HTML5 Canvas and ES6 support.
 2. **Fragment Size**: Larger fragments = faster painting, less detail
 3. **Speed Setting**: Adjust based on device capability
 4. **Image Format**: JPEG recommended for faster loading
+5. **Brush Effect**: See [BRUSH_EFFECT.md](BRUSH_EFFECT.md) for customization options
 
 ## Future Enhancements
 

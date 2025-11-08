@@ -190,6 +190,26 @@ header h1 {
     font-weight: 600;
 }
 
+.settings label.repeat-toggle {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.settings label.repeat-toggle input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: #667eea;
+}
+
+.settings label.repeat-toggle span {
+    font-size: 1em;
+    color: #333;
+}
+
 .settings input[type="range"] {
     width: 150px;
     cursor: pointer;

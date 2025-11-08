@@ -15,6 +15,15 @@ class PaintEngine {
         this.onComplete = null;
         this.lastFrameTime = 0;
         this.fragmentsPerFrame = 1;
+        this.isErasing = false; // Track if we're in erase mode
+        this.drawnFragments = []; // Track which fragments have been drawn
+        this.currentFragmentColumn = 0; // Current column being drawn in fragment
+        this.currentFragmentDirection = 1; // 1 for left-to-right, -1 for right-to-left
+        this.columnsPerFrame = 5; // Number of columns to draw per frame (increased for faster painting)
+        
+        // Memory optimization: reuse temp canvas instead of creating new ones
+        this.tempCanvas = document.createElement('canvas');
+        this.tempCtx = this.tempCanvas.getContext('2d', { willReadFrequently: true });
     }
 
     /**
@@ -28,13 +37,17 @@ class PaintEngine {
         this.currentIndex = 0;
         this.isPlaying = false;
         this.isPaused = false;
+        this.isErasing = false;
+        this.drawnFragments = [];
+        this.currentFragmentColumn = 0;
+        this.currentFragmentDirection = 1;
 
         // Set canvas dimensions
         this.canvas.width = width;
         this.canvas.height = height;
 
-        // Clear canvas with white background
-        this.ctx.fillStyle = '#ffffff';
+        // Clear canvas with black background
+        this.ctx.fillStyle = '#000000';
         this.ctx.fillRect(0, 0, width, height);
 
         this.updateFragmentsPerFrame();
@@ -89,9 +102,13 @@ class PaintEngine {
         this.currentIndex = 0;
         this.isPlaying = false;
         this.isPaused = false;
+        this.isErasing = false;
+        this.drawnFragments = [];
+        this.currentFragmentColumn = 0;
+        this.currentFragmentDirection = 1;
 
         if (this.canvas.width > 0 && this.canvas.height > 0) {
-            this.ctx.fillStyle = '#ffffff';
+            this.ctx.fillStyle = '#000000';
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
@@ -122,26 +139,81 @@ class PaintEngine {
         if (deltaTime >= 16.67) {
             this.lastFrameTime = currentTime;
 
-            // Draw multiple fragments based on speed
-            let fragmentsDrawn = 0;
-            while (fragmentsDrawn < this.fragmentsPerFrame && this.currentIndex < this.fragments.length) {
-                this.drawFragment(this.fragments[this.currentIndex]);
-                this.currentIndex++;
-                fragmentsDrawn++;
-            }
-
-            // Update progress
-            if (this.onProgress) {
-                this.onProgress(this.currentIndex, this.fragments.length);
-            }
-
-            // Check if complete
-            if (this.currentIndex >= this.fragments.length) {
-                this.isPlaying = false;
-                if (this.onComplete) {
-                    this.onComplete();
+            if (this.isErasing) {
+                // Erase fragments in reverse order
+                let fragmentsErased = 0;
+                while (fragmentsErased < this.fragmentsPerFrame && this.currentIndex >= 0) {
+                    this.eraseFragment(this.currentIndex);
+                    this.currentIndex--;
+                    fragmentsErased++;
                 }
-                return;
+
+                // Update progress (show as reverse)
+                if (this.onProgress) {
+                    this.onProgress(Math.max(0, this.currentIndex + 1), this.fragments.length);
+                }
+
+                // Check if erasing complete
+                if (this.currentIndex < 0) {
+                    this.isErasing = false;
+                    this.currentIndex = 0;
+                    this.drawnFragments = [];
+                    // Notify completion so it can restart
+                    if (this.onComplete) {
+                        this.onComplete();
+                    }
+                    return;
+                }
+            } else {
+                // Draw fragments column by column
+                if (this.currentIndex < this.fragments.length) {
+                    const fragment = this.fragments[this.currentIndex];
+                    
+                    // Start new fragment - choose random direction
+                    if (this.currentFragmentColumn === 0) {
+                        this.currentFragmentDirection = Math.random() > 0.5 ? 1 : -1;
+                        if (this.currentFragmentDirection === -1) {
+                            this.currentFragmentColumn = fragment.width - 1;
+                        }
+                    }
+                    
+                    // Draw multiple columns per frame
+                    let columnsDrawn = 0;
+                    while (columnsDrawn < this.columnsPerFrame) {
+                        this.drawFragmentColumn(fragment, this.currentFragmentColumn);
+                        this.currentFragmentColumn += this.currentFragmentDirection;
+                        columnsDrawn++;
+                        
+                        // Check if fragment is complete
+                        if (this.currentFragmentDirection === 1 && this.currentFragmentColumn >= fragment.width) {
+                            // Left-to-right complete
+                            this.currentFragmentColumn = 0;
+                            this.currentIndex++;
+                            this.drawnFragments.push(this.currentIndex - 1);
+                            break;
+                        } else if (this.currentFragmentDirection === -1 && this.currentFragmentColumn < 0) {
+                            // Right-to-left complete
+                            this.currentFragmentColumn = 0;
+                            this.currentIndex++;
+                            this.drawnFragments.push(this.currentIndex - 1);
+                            break;
+                        }
+                    }
+                }
+
+                // Update progress
+                if (this.onProgress) {
+                    this.onProgress(this.currentIndex, this.fragments.length);
+                }
+
+                // Check if drawing complete
+                if (this.currentIndex >= this.fragments.length) {
+                    this.isPlaying = false;
+                    if (this.onComplete) {
+                        this.onComplete();
+                    }
+                    return;
+                }
             }
         }
 
@@ -150,14 +222,151 @@ class PaintEngine {
     }
 
     /**
-     * Draw a single fragment on the canvas
+     * Start erasing mode (reverse painting)
+     */
+    startErasing() {
+        if (this.isErasing) return;
+        this.isErasing = true;
+        this.currentIndex = this.fragments.length - 1;
+        this.isPlaying = true;
+        this.isPaused = false;
+        this.lastFrameTime = performance.now();
+        this.animate();
+    }
+
+    /**
+     * Erase a fragment by redrawing the canvas without it
+     * @param {number} index - Index of fragment to erase
+     */
+    eraseFragment(index) {
+        // Clear the entire canvas
+        this.ctx.fillStyle = '#000000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Redraw all fragments except those from index onwards
+        // Use batch rendering for better performance
+        for (let i = 0; i < index; i++) {
+            this.drawFragmentDirect(this.fragments[i]);
+        }
+    }
+    
+    /**
+     * Clean up resources to free memory
+     */
+    cleanup() {
+        // Clear fragments array to free memory
+        this.drawnFragments = [];
+        
+        // Reset temp canvas to minimal size
+        if (this.tempCanvas) {
+            this.tempCanvas.width = 1;
+            this.tempCanvas.height = 1;
+        }
+    }
+
+    /**
+     * Draw a single column of a fragment
+     * @param {Object} fragment - Fragment data
+     * @param {number} column - Column index to draw
+     */
+    drawFragmentColumn(fragment, column) {
+        if (column < 0 || column >= fragment.width) return;
+        
+        const imageData = fragment.imageData;
+        const data = imageData.data;
+        
+        // Batch pixel operations for better performance
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.9 + Math.random() * 0.1;
+        
+        // Draw each pixel in this column
+        for (let y = 0; y < fragment.height; y++) {
+            const idx = (y * fragment.width + column) * 4;
+            const a = data[idx + 3];
+            
+            // Skip transparent pixels
+            if (a === 0) continue;
+            
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            
+            this.ctx.fillStyle = `rgb(${r},${g},${b})`;
+            this.ctx.fillRect(
+                fragment.x + column,
+                fragment.y + y,
+                1.2,
+                1.2
+            );
+        }
+        
+        this.ctx.restore();
+    }
+
+    /**
+     * Draw a single fragment on the canvas with brush-like effect
      * @param {Object} fragment - Fragment data
      */
     drawFragment(fragment) {
-        this.ctx.putImageData(
-            fragment.imageData,
-            fragment.x,
-            fragment.y
+        // Log brush effect on first fragment
+        if (this.currentIndex === 0) {
+            console.log('🖌️ Brush rendering active: opacity variation, position jitter, smoothing');
+        }
+
+        // Reuse temp canvas instead of creating new one (memory optimization)
+        if (this.tempCanvas.width !== fragment.width || this.tempCanvas.height !== fragment.height) {
+            this.tempCanvas.width = fragment.width;
+            this.tempCanvas.height = fragment.height;
+        }
+
+        // Draw fragment to temporary canvas
+        this.tempCtx.putImageData(fragment.imageData, 0, 0);
+
+        // Save current context state
+        this.ctx.save();
+
+        // Add opacity variation for organic brush feel
+        const opacityVariation = 0.80 + Math.random() * 0.20; // 0.80 to 1.0
+        this.ctx.globalAlpha = opacityVariation;
+
+        // Use source-over for natural blending
+        this.ctx.globalCompositeOperation = 'source-over';
+
+        // Add position jitter for more organic feel
+        const jitterX = (Math.random() - 0.5) * 1.5;
+        const jitterY = (Math.random() - 0.5) * 1.5;
+
+        // Draw with slight blur for softer brush strokes
+        this.ctx.imageSmoothingEnabled = true;
+        this.ctx.imageSmoothingQuality = 'high';
+
+        // Draw the fragment from temp canvas
+        this.ctx.drawImage(
+            this.tempCanvas,
+            0, 0, fragment.width, fragment.height,
+            fragment.x + jitterX, fragment.y + jitterY, fragment.width, fragment.height
+        );
+
+        // Restore context state
+        this.ctx.restore();
+    }
+
+    /**
+     * Draw a fragment directly without brush effects (for erasing redraw)
+     * @param {Object} fragment - Fragment data
+     */
+    drawFragmentDirect(fragment) {
+        // Reuse temp canvas instead of creating new one
+        if (this.tempCanvas.width !== fragment.width || this.tempCanvas.height !== fragment.height) {
+            this.tempCanvas.width = fragment.width;
+            this.tempCanvas.height = fragment.height;
+        }
+        this.tempCtx.putImageData(fragment.imageData, 0, 0);
+        
+        this.ctx.drawImage(
+            this.tempCanvas,
+            0, 0, fragment.width, fragment.height,
+            fragment.x, fragment.y, fragment.width, fragment.height
         );
     }
 
