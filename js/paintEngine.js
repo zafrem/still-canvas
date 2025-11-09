@@ -177,9 +177,13 @@ class PaintEngine {
                         }
                     }
                     
+                    // Adaptive columns per frame based on fragment size
+                    // Larger fragments draw more columns per frame to maintain consistent speed
+                    const adaptiveColumnsPerFrame = Math.max(5, Math.ceil(fragment.width / 10));
+                    
                     // Draw multiple columns per frame
                     let columnsDrawn = 0;
-                    while (columnsDrawn < this.columnsPerFrame) {
+                    while (columnsDrawn < adaptiveColumnsPerFrame) {
                         this.drawFragmentColumn(fragment, this.currentFragmentColumn);
                         this.currentFragmentColumn += this.currentFragmentDirection;
                         columnsDrawn++;

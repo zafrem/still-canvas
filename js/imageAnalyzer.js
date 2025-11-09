@@ -61,13 +61,13 @@ class ImageAnalyzer {
         const fullImageData = this.ctx.getImageData(0, 0, img.width, img.height);
         
         // Create organic brush-shaped fragments based on color similarity
-        const fragments = this.createOrganicFragments(fullImageData, fragmentSize);
+        let fragments = this.createOrganicFragments(fullImageData, fragmentSize);
 
-        // Sort fragments by brightness (lightest to darkest)
-        fragments.sort((a, b) => b.brightness - a.brightness);
+        // Sort fragments spatially starting from the brightest fragment
+        fragments = this.sortFragmentsSpatially(fragments);
 
         console.log('🎨 Created', fragments.length, 'organic brush-shaped fragments');
-        console.log('✓ Painting from light to dark colors');
+        console.log('✓ Painting from brightest area outward');
 
         return fragments;
     }
@@ -85,15 +85,20 @@ class ImageAnalyzer {
         const visited = new Uint8Array(width * height);
         let fragments = [];
         
-        // Color similarity threshold (higher = larger fragments with more color variation)
-        const colorThreshold = 100; // 더 큰 색상 유사도 범위
+        // Calculate minimum size based on total image area divided by target fragment count (500)
+        const totalPixels = width * height;
+        const targetFragmentCount = 500;
+        const avgFragmentSize = totalPixels / targetFragmentCount;
         
-        // Minimum and maximum fragment size
-        const minSize = Math.max(16, Math.floor(targetSize * 5)); // 최소 크기를 targetSize * 5로 설정
-        const maxSize = targetSize * targetSize * 10; // 더 큰 최대 크기
+        // No color threshold - fragments are purely spatial (not color-based)
+        const colorThreshold = Infinity; // 색상 무관하게 공간적으로만 조각 생성
         
-        // Sample starting points in a semi-random pattern (wider spacing)
-        const step = Math.max(12, Math.floor(targetSize * 1.2)); // 더 넓은 간격
+        // Minimum and maximum fragment size based on image size (similar sizes)
+        const minSize = Math.max(50, Math.floor(avgFragmentSize * 0.8)); // 평균의 80%
+        const maxSize = Math.floor(avgFragmentSize * 1.2); // 평균의 120% (좁은 범위)
+        
+        // Sample starting points with natural spacing (allow overlap)
+        const step = Math.max(15, Math.floor(Math.sqrt(avgFragmentSize) * 0.9)); // 자연스러운 간격
         
         for (let startY = 0; startY < height; startY += step) {
             for (let startX = 0; startX < width; startX += step) {
@@ -102,12 +107,13 @@ class ImageAnalyzer {
                 const y = Math.min(height - 1, startY + Math.floor(Math.random() * step));
                 const idx = y * width + x;
                 
-                if (visited[idx]) continue;
+                // Create a temporary visited array for this fragment to allow overlapping
+                const tempVisited = new Uint8Array(visited);
                 
                 // Grow an organic region from this point
                 const region = this.growOrganicRegion(
                     data, width, height, x, y, 
-                    visited, colorThreshold, maxSize
+                    tempVisited, colorThreshold, maxSize
                 );
                 
                 if (region.pixels.length >= minSize) {
@@ -122,7 +128,15 @@ class ImageAnalyzer {
             }
         }
         
-        // Fill any remaining unvisited pixels with small fragments
+        // Count unvisited pixels before filling
+        let totalUnvisited = 0;
+        for (let i = 0; i < visited.length; i++) {
+            if (!visited[i]) totalUnvisited++;
+        }
+        console.log(`🔍 Found ${totalUnvisited} unvisited pixels (${(totalUnvisited / visited.length * 100).toFixed(2)}%)`);
+        
+        // Fill any remaining unvisited pixels with fragments (no minimum size)
+        let fillFragmentCount = 0;
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
                 const idx = y * width + x;
@@ -132,20 +146,56 @@ class ImageAnalyzer {
                         visited, colorThreshold, maxSize
                     );
                     
+                    // Accept all fragments, even tiny ones, to fill gaps
                     if (region.pixels.length > 0) {
                         const fragment = this.createFragmentFromRegion(
                             region, data, width, height
                         );
                         if (fragment) {
                             fragments.push(fragment);
+                            fillFragmentCount++;
                         }
                     }
                 }
             }
         }
+        console.log(`✓ Created ${fillFragmentCount} fill fragments to cover gaps`);
         
         // Merge small fragments with nearby fragments
         fragments = this.mergeSmallFragments(fragments, minSize * 2);
+        
+        // Debug: Log fragment size statistics
+        console.log('\n📊 Fragment Size Statistics:');
+        console.log(`Total fragments: ${fragments.length}`);
+        console.log(`Target count: ${targetFragmentCount}`);
+        console.log(`Average target size: ${avgFragmentSize.toFixed(0)} pixels`);
+        console.log(`Min size threshold: ${minSize} pixels`);
+        console.log(`Max size threshold: ${maxSize} pixels`);
+        
+        // Calculate actual fragment sizes
+        const sizes = fragments.map(f => {
+            // Count actual non-transparent pixels
+            let pixelCount = 0;
+            const data = f.imageData.data;
+            for (let i = 3; i < data.length; i += 4) {
+                if (data[i] > 0) pixelCount++;
+            }
+            return pixelCount;
+        });
+        
+        sizes.sort((a, b) => a - b);
+        const minActual = sizes[0];
+        const maxActual = sizes[sizes.length - 1];
+        const avgActual = sizes.reduce((a, b) => a + b, 0) / sizes.length;
+        const medianActual = sizes[Math.floor(sizes.length / 2)];
+        
+        console.log(`\nActual fragment sizes:`);
+        console.log(`  Min: ${minActual} pixels (radius ~${Math.sqrt(minActual/Math.PI).toFixed(1)}px)`);
+        console.log(`  Max: ${maxActual} pixels (radius ~${Math.sqrt(maxActual/Math.PI).toFixed(1)}px)`);
+        console.log(`  Avg: ${avgActual.toFixed(0)} pixels (radius ~${Math.sqrt(avgActual/Math.PI).toFixed(1)}px)`);
+        console.log(`  Median: ${medianActual} pixels (radius ~${Math.sqrt(medianActual/Math.PI).toFixed(1)}px)`);
+        console.log(`\nFirst 10 fragments: ${sizes.slice(0, 10).join(', ')} pixels`);
+        console.log(`Last 10 fragments: ${sizes.slice(-10).join(', ')} pixels\n`);
         
         return fragments;
     }
@@ -164,7 +214,7 @@ class ImageAnalyzer {
      */
     growOrganicRegion(data, width, height, seedX, seedY, visited, threshold, maxSize) {
         const pixels = [];
-        const queue = [{x: seedX, y: seedY}];
+        const queue = [{x: seedX, y: seedY, dist: 0}];
         const seedIdx = seedY * width + seedX;
         
         // Get seed color
@@ -175,25 +225,64 @@ class ImageAnalyzer {
         let minX = seedX, maxX = seedX;
         let minY = seedY, maxY = seedY;
         
+        // Random brush stroke orientation (angle in radians)
+        const strokeAngle = Math.random() * Math.PI * 2;
+        const cosAngle = Math.cos(strokeAngle);
+        const sinAngle = Math.sin(strokeAngle);
+        
+        // Brush stroke dimensions (elongated, ratio ~3:1 to 4:1)
+        const strokeLength = Math.sqrt(maxSize / Math.PI) * 2.0; // Length
+        const strokeWidth = Math.sqrt(maxSize / Math.PI) * 0.6; // Width
+        
+        // Create noise pattern for rough brush edges
+        const noiseScale = 0.15; // How much variation in edges
+        const noiseFreq = 0.3; // Frequency of edge variation
+        
         while (queue.length > 0 && pixels.length < maxSize) {
-            const {x, y} = queue.shift();
+            const {x, y, dist} = queue.shift();
             const idx = y * width + x;
             
             if (x < 0 || x >= width || y < 0 || y >= height) continue;
+            
+            // Still need to check visited within this fragment to avoid infinite loop
             if (visited[idx]) continue;
             
-            // Check color similarity
-            const r = data[idx * 4];
-            const g = data[idx * 4 + 1];
-            const b = data[idx * 4 + 2];
+            // Check if pixel is within brush stroke
+            const dx = x - seedX;
+            const dy = y - seedY;
             
-            const colorDiff = Math.sqrt(
-                Math.pow(r - seedR, 2) +
-                Math.pow(g - seedG, 2) +
-                Math.pow(b - seedB, 2)
-            );
+            // Rotate point to stroke's coordinate system
+            const rotatedX = dx * cosAngle + dy * sinAngle;
+            const rotatedY = -dx * sinAngle + dy * cosAngle;
             
-            if (colorDiff > threshold) continue;
+            // Add noise to create rough brush edges
+            const noiseX = Math.sin(rotatedY * noiseFreq + seedX) * noiseScale;
+            const noiseY = Math.sin(rotatedX * noiseFreq + seedY) * noiseScale;
+            
+            // Brush stroke shape with rough edges
+            const distX = Math.abs(rotatedX) / strokeLength;
+            const distY = Math.abs(rotatedY + noiseY * strokeWidth) / (strokeWidth * (1 + noiseX));
+            
+            // Tapered ends (narrower at the ends)
+            const taper = 1.0 - Math.pow(Math.abs(rotatedX) / strokeLength, 1.5) * 0.3;
+            
+            if (distX > 1.0 || distY > taper) continue;
+            
+            // Spatial-only growth (no color check for clustered fragments)
+            // Only skip if threshold is not Infinity (for backward compatibility)
+            if (threshold !== Infinity) {
+                const r = data[idx * 4];
+                const g = data[idx * 4 + 1];
+                const b = data[idx * 4 + 2];
+                
+                const colorDiff = Math.sqrt(
+                    Math.pow(r - seedR, 2) +
+                    Math.pow(g - seedG, 2) +
+                    Math.pow(b - seedB, 2)
+                );
+                
+                if (colorDiff > threshold) continue;
+            }
             
             // Mark as visited and add to region
             visited[idx] = 1;
@@ -205,23 +294,17 @@ class ImageAnalyzer {
             minY = Math.min(minY, y);
             maxY = Math.max(maxY, y);
             
-            // Add neighbors with some randomness for organic shape
+            // Add all 8 neighbors for more compact, clustered fragments
             const neighbors = [
-                {x: x + 1, y: y},
-                {x: x - 1, y: y},
-                {x: x, y: y + 1},
-                {x: x, y: y - 1}
+                {x: x + 1, y: y, dist: dist + 1},
+                {x: x - 1, y: y, dist: dist + 1},
+                {x: x, y: y + 1, dist: dist + 1},
+                {x: x, y: y - 1, dist: dist + 1},
+                {x: x + 1, y: y + 1, dist: dist + 1.414},
+                {x: x - 1, y: y - 1, dist: dist + 1.414},
+                {x: x + 1, y: y - 1, dist: dist + 1.414},
+                {x: x - 1, y: y + 1, dist: dist + 1.414}
             ];
-            
-            // Occasionally add diagonal neighbors for more natural shapes
-            if (Math.random() > 0.5) {
-                neighbors.push(
-                    {x: x + 1, y: y + 1},
-                    {x: x - 1, y: y - 1},
-                    {x: x + 1, y: y - 1},
-                    {x: x - 1, y: y + 1}
-                );
-            }
             
             // Shuffle neighbors for more organic growth
             for (let i = neighbors.length - 1; i > 0; i--) {
@@ -388,11 +471,11 @@ class ImageAnalyzer {
      * @returns {Array} Array with merged fragments
      */
     mergeSmallFragments(fragments, minSize) {
-        // Target minimum size for final fragments (더 큰 최소 크기)
-        const targetMinSize = minSize * 5; // 3에서 5로 증가
+        // Target minimum size for final fragments (더 적극적인 병합)
+        const targetMinSize = minSize * 1.5; // minSize의 1.5배로 증가
         let currentFragments = fragments;
         let iteration = 0;
-        const maxIterations = 5; // 3에서 5로 증가
+        const maxIterations = 5; // 반복 횟수 증가
         
         // 작은 조각이 없을 때까지 반복 병합
         while (iteration < maxIterations) {
@@ -428,9 +511,26 @@ class ImageAnalyzer {
                 used.add(i);
                 let currentSize = toMerge[i].width * toMerge[i].height;
                 
-                // 목표 크기에 도달할 때까지 가까운 조각들을 계속 추가
-                for (let j = i + 1; j < toMerge.length && currentSize < targetMinSize; j++) {
+                // 목표 크기에 도달할 때까지 색상이 비슷한 조각들을 병합
+                const maxGroupSize = targetMinSize * 2.5; // 최대 크기 제한 증가
+                
+                // 그룹의 평균 밝기 계산
+                let avgBrightness = 0;
+                for (const frag of group) {
+                    avgBrightness += frag.brightness;
+                }
+                avgBrightness /= group.length;
+                
+                // 가장 색상이 비슷한 조각 찾기
+                const candidates = [];
+                for (let j = i + 1; j < toMerge.length; j++) {
                     if (used.has(j)) continue;
+                    
+                    const frag2 = toMerge[j];
+                    const frag2Size = frag2.width * frag2.height;
+                    
+                    // 너무 커지는 것 방지
+                    if (currentSize + frag2Size > maxGroupSize) continue;
                     
                     // 그룹의 중심점 계산
                     let centerX = 0, centerY = 0;
@@ -441,34 +541,53 @@ class ImageAnalyzer {
                     centerX /= group.length;
                     centerY /= group.length;
                     
-                    const frag2 = toMerge[j];
                     const frag2CenterX = frag2.x + frag2.width / 2;
                     const frag2CenterY = frag2.y + frag2.height / 2;
                     
-                    // Check distance from group center
+                    // 거리 계산
                     const distance = Math.sqrt(
                         Math.pow(centerX - frag2CenterX, 2) + 
                         Math.pow(centerY - frag2CenterY, 2)
                     );
                     
-                    // 평균 밝기 계산
-                    let avgBrightness = 0;
+                    // 주변 조각만 고려 (거리 제한)
+                    if (distance < targetMinSize * 3) {
+                        // 색상 차이 계산
+                        const brightnessDiff = Math.abs(avgBrightness - frag2.brightness);
+                        
+                        candidates.push({
+                            index: j,
+                            fragment: frag2,
+                            size: frag2Size,
+                            distance: distance,
+                            brightnessDiff: brightnessDiff,
+                            // 색상 유사도를 우선, 거리는 보조
+                            score: brightnessDiff * 2 + distance * 0.1
+                        });
+                    }
+                }
+                
+                // 색상이 가장 비슷한 순서로 정렬
+                candidates.sort((a, b) => a.score - b.score);
+                
+                // 가장 비슷한 조각들을 병합
+                for (const candidate of candidates) {
+                    if (currentSize >= targetMinSize) break;
+                    if (used.has(candidate.index)) continue;
+                    
+                    group.push(candidate.fragment);
+                    used.add(candidate.index);
+                    currentSize += candidate.size;
+                    
+                    // 평균 밝기 업데이트
+                    avgBrightness = 0;
                     for (const frag of group) {
                         avgBrightness += frag.brightness;
                     }
                     avgBrightness /= group.length;
                     
-                    const brightnessDiff = Math.abs(avgBrightness - frag2.brightness);
-                    
-                    // 거리와 밝기 조건을 더 관대하게 (작은 조각을 적극적으로 병합)
-                    if (distance < targetMinSize * 4 && brightnessDiff < 70) {
-                        group.push(frag2);
-                        used.add(j);
-                        currentSize += frag2.width * frag2.height;
-                        
-                        // 너무 큰 그룹 방지
-                        if (group.length >= 30) break;
-                    }
+                    // 최대 10개 조각까지만 병합
+                    if (group.length >= 10) break;
                 }
                 
                 groups.push(group);
@@ -565,6 +684,88 @@ class ImageAnalyzer {
             brightness: brightness,
             imageData: imageData
         };
+    }
+
+    /**
+     * Sort fragments spatially starting from the brightest fragment and painting outward
+     * @param {Array} fragments - Array of fragments
+     * @returns {Array} Spatially sorted fragments
+     */
+    sortFragmentsSpatially(fragments) {
+        if (fragments.length === 0) return fragments;
+        
+        // Find the brightest fragment
+        let brightestIndex = 0;
+        let maxBrightness = fragments[0].brightness;
+        
+        for (let i = 1; i < fragments.length; i++) {
+            if (fragments[i].brightness > maxBrightness) {
+                maxBrightness = fragments[i].brightness;
+                brightestIndex = i;
+            }
+        }
+        
+        // Start with the brightest fragment
+        const sorted = [fragments[brightestIndex]];
+        const remaining = fragments.filter((_, idx) => idx !== brightestIndex);
+        
+        // Track recent fragments for faster neighbor search (last 20 fragments)
+        const recentFragments = [fragments[brightestIndex]];
+        const recentLimit = 20;
+        
+        // Repeatedly add the closest unprocessed fragment to recently painted fragments
+        while (remaining.length > 0) {
+            let closestIndex = -1;
+            let minDistance = Infinity;
+            
+            // Find the closest remaining fragment to recently painted fragments
+            for (let i = 0; i < remaining.length; i++) {
+                const frag1 = remaining[i];
+                const center1X = frag1.x + frag1.width / 2;
+                const center1Y = frag1.y + frag1.height / 2;
+                
+                // Check distance to recent fragments only (much faster)
+                for (const recentFrag of recentFragments) {
+                    const center2X = recentFrag.x + recentFrag.width / 2;
+                    const center2Y = recentFrag.y + recentFrag.height / 2;
+                    
+                    const distance = Math.sqrt(
+                        Math.pow(center1X - center2X, 2) +
+                        Math.pow(center1Y - center2Y, 2)
+                    );
+                    
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        closestIndex = i;
+                    }
+                }
+            }
+            
+            // Add the closest fragment to sorted list
+            if (closestIndex !== -1) {
+                const nextFragment = remaining[closestIndex];
+                sorted.push(nextFragment);
+                remaining.splice(closestIndex, 1);
+                
+                // Update recent fragments list
+                recentFragments.push(nextFragment);
+                if (recentFragments.length > recentLimit) {
+                    recentFragments.shift(); // Remove oldest
+                }
+            } else {
+                // Fallback: just add the first remaining fragment
+                const nextFragment = remaining[0];
+                sorted.push(nextFragment);
+                remaining.splice(0, 1);
+                
+                recentFragments.push(nextFragment);
+                if (recentFragments.length > recentLimit) {
+                    recentFragments.shift();
+                }
+            }
+        }
+        
+        return sorted;
     }
 
     /**
